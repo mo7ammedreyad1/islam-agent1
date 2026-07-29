@@ -143,7 +143,7 @@ function startStaticServer() {
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // سلسلة نماذج احتياطية — التبديل تلقائي للي بعده لما نستنفد محاولات إعادة الاتصال
 // على النموذج الحالي. مرتبة من الأعلى قدرة للأكرم في حدود الخطة المجانية (RPM).
-const MODEL_CHAIN = (process.env.GEMINI_MODEL_CHAIN || 'gemini-3.0-flash-preview,gemini-3.1-flash-lite,gemini-3.5-flash-lite')
+const MODEL_CHAIN = (process.env.GEMINI_MODEL_CHAIN || 'gemini-3.1-flash-lite,gemini-3.5-flash-lite')
   .split(',').map((s) => s.trim()).filter(Boolean);
 let currentModelIndex = 0;
 
