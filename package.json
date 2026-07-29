@@ -1,0 +1,12 @@
+{
+  "name": "ofoq-ai-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "أوفق AI Agent — بناء فيديوهات قرآنية بمعمارية Plan-and-Solve + Reflexion عبر Gemini",
+  "scripts": {
+    "agent": "node agent.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}
