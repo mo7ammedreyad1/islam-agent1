@@ -1,10 +1,10 @@
 // ============================================================================
 // أوفق AI Agent v2.0 — باذن الله
 //
-// أداة واحدة بس: run_terminal. الـ AI هو اللي بيعمل كل حاجة (جلب نصوص، تحميل صوت،
-// كتابة ملفات، رندر، رفع) عن طريق أوامر شل حقيقية — مفيش أي "أداة مخصصة" لكل خطوة.
-// حتى الرندر نفسه بقى subcommand جوه نفس الملف ده (node agent.js render <file>)،
-// والـ AI بيشغّله زي أي أمر تاني عن طريق run_terminal.
+// أداة واحدة بس: run_terminal. الـ AI هو اللي بيعمل كل حاجة بنفسه بالكامل —
+// جلب نصوص، تحميل صوت، كتابة ملفات، **وحتى كتابة وتشغيل كود الرندر بالـ Playwright
+// بنفسه** (الوصفة موجودة كمرجع في AGENTS.md، مش دالة جاهزة هنا). agent.js
+// مفيهوش أي منطق محتوى أو رندر خالص — بس المحرك اللي بيشغّل الأداة الوحيدة.
 //
 // معمارية التفكير: Plan-and-Solve (خطة نصية كاملة قبل أول أمر) + Reflexion
 // (مراجعة نصية إلزامية بعد كل فيديو، عن طريق ملفات "علامة" بيراقبها agent.js).
@@ -12,129 +12,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const http = require('http');
 const { execSync } = require('child_process');
-const { chromium } = require('playwright');
 
 const WORK_DIR = process.cwd();
-const OUTPUT_DIR = path.join(WORK_DIR, 'output');
-const PORT = 8934;
 
 function log(msg) {
   console.error(`[agent ${new Date().toISOString()}] ${msg}`);
-}
-
-// ============================================================================
-// وضع الرندر (subcommand) — يشتغل كـ: node agent.js render <path/to/scene.html>
-// عملية منفصلة تمامًا، بتفتح Chrome، تستنى الرندر، وتطبع JSON واحد على stdout بس
-// (كل اللوجات التانية على stderr عشان الـ AI ياخد نتيجة نضيفة قابلة للقراءة)
-// ============================================================================
-async function renderVideoCli(filePath) {
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  const server = await startStaticServer();
-  let browser;
-  const consoleLogs = [];
-  const failedRequests = [];
-  let firstPageError = null;
-  let firstPageErrorAt = null;
-
-  try {
-    browser = await chromium.launch({
-      channel: 'chrome',
-      args: ['--autoplay-policy=no-user-gesture-required'],
-    });
-    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-
-    page.on('console', (msg) => consoleLogs.push(`[console:${msg.type()}] ${msg.text()}`));
-    page.on('pageerror', (err) => {
-      consoleLogs.push('[pageerror] ' + err.message);
-      if (!firstPageError) { firstPageError = err.message; firstPageErrorAt = Date.now(); }
-    });
-    page.on('requestfailed', (req) => {
-      failedRequests.push(`${req.url()} — ${req.failure()?.errorText || 'فشل بدون سبب واضح'}`);
-    });
-    page.on('response', (res) => {
-      if (res.status() >= 400) failedRequests.push(`HTTP ${res.status()} — ${res.url()}`);
-    });
-
-    const url = `http://localhost:${PORT}/${filePath}`;
-    log('فتح: ' + url);
-    await page.goto(url, { waitUntil: 'load' });
-
-    const TIMEOUT_MS = 8 * 60 * 1000;
-    const EARLY_FAIL_GRACE_MS = 8000; // لو حصل pageerror بدري، مستنينش الـ 8 دقايق كاملة
-    const start = Date.now();
-    let status = 'pending';
-
-    while (Date.now() - start < TIMEOUT_MS) {
-      status = await page.evaluate(() => window.__ofoqStatus || 'pending');
-      if (status === 'done' || status === 'error') break;
-      if (firstPageError && Date.now() - firstPageErrorAt > EARLY_FAIL_GRACE_MS) {
-        log('اكتشاف كسر مبكر في الصفحة — إيقاف الانتظار بدل ما نستنى التايم آوت الكامل');
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 1500));
-    }
-
-    const baseResult = {
-      console_logs: consoleLogs.slice(-80),
-      failed_requests: [...new Set(failedRequests)].slice(-30),
-    };
-
-    if (status !== 'done') {
-      const errMsg = await page.evaluate(() => window.__ofoqError || null)
-        .catch(() => null) || firstPageError || 'timeout أو حالة غير معروفة — راجع console_logs وfailed_requests';
-      console.log(JSON.stringify({ success: false, error: errMsg, ...baseResult }));
-      process.exitCode = 1;
-      return;
-    }
-
-    const base64 = await page.evaluate(() => window.__ofoqBase64);
-    const filename = await page.evaluate(() => window.__ofoqFilename || 'output.mp4');
-    const buffer = Buffer.from(base64, 'base64');
-    const outPath = path.join(OUTPUT_DIR, filename);
-    fs.writeFileSync(outPath, buffer);
-
-    console.log(JSON.stringify({
-      success: true,
-      local_path: path.relative(WORK_DIR, outPath),
-      filename,
-      size_bytes: buffer.length,
-      ...baseResult,
-    }));
-  } catch (e) {
-    console.log(JSON.stringify({
-      success: false,
-      error: e.message,
-      console_logs: consoleLogs.slice(-80),
-      failed_requests: [...new Set(failedRequests)].slice(-30),
-    }));
-    process.exitCode = 1;
-  } finally {
-    if (browser) await browser.close();
-    server.close();
-  }
-}
-
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.mp3': 'audio/mpeg',
-};
-
-function startStaticServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer((req, res) => {
-      const filePath = path.join(WORK_DIR, decodeURIComponent(req.url.split('?')[0]));
-      fs.readFile(filePath, (err, data) => {
-        if (err) { res.writeHead(404); res.end('Not found'); return; }
-        const ext = path.extname(filePath);
-        res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-        res.end(data);
-      });
-    });
-    server.listen(PORT, () => resolve(server));
-  });
 }
 
 // ============================================================================
@@ -143,7 +26,7 @@ function startStaticServer() {
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // سلسلة نماذج احتياطية — التبديل تلقائي للي بعده لما نستنفد محاولات إعادة الاتصال
 // على النموذج الحالي. مرتبة من الأعلى قدرة للأكرم في حدود الخطة المجانية (RPM).
-const MODEL_CHAIN = (process.env.GEMINI_MODEL_CHAIN || 'gemini-3.1-flash-lite,gemini-3.5-flash-lite')
+const MODEL_CHAIN = (process.env.GEMINI_MODEL_CHAIN || 'gemini-3.5-flash,gemini-2.5-flash,gemini-2.5-flash-lite')
   .split(',').map((s) => s.trim()).filter(Boolean);
 let currentModelIndex = 0;
 
@@ -151,6 +34,10 @@ const TASK_JSON = process.env.TASK_JSON || 'اعمل فيديو سورة الإ�
 const CALLBACK_URL = process.env.CALLBACK_URL || ''; // هيتحدد لاحقًا، اختياري دلوقتي
 const GH_REPO = process.env.GITHUB_REPOSITORY || '';
 const RELEASE_TAG = `render-${process.env.GITHUB_RUN_NUMBER || Date.now()}`;
+// لازم نسجّلهم فعليًا في process.env — مش بس متغيرات JS محلية — عشان يبقوا
+// متاحين كـ $RELEASE_TAG و$GH_REPO جوه أي أمر run_terminal (bash child process)
+process.env.RELEASE_TAG = RELEASE_TAG;
+process.env.GH_REPO = GH_REPO;
 const MAX_TURNS = 80;
 
 const TASK_COMPLETE_MARKER = 'TASK_COMPLETE.json';
@@ -212,10 +99,10 @@ function lightSanityCheck(command, result) {
     if (!fs.existsSync(fullPath)) continue;
     const content = fs.readFileSync(fullPath, 'utf-8');
     if (!/[\u0600-\u06FF]{10,}/.test(content)) {
-      return `تنبيه: ${f} مفيهوش نص عربي واضح — تأكد إنك كتبت نص الآية/التفسير الحقيقي جواه، مش placeholder.`;
+      return `${f} مفيهوش نص عربي حقيقي (10 حروف متصلة على الأقل) — ده معناه النص الحقيقي اللي جبته بـ curl مكتبش فعليًا جوه الملف. ممنوع تعتبر الفيديو ده جاهز أو ترفعه، صحّح نفس الملف وأعد الرندر.`;
     }
     if (!content.includes('mediabunny')) {
-      return `تنبيه: ${f} مفيهوش استيراد Mediabunny — راجع العقد التقني في AGENTS.md قبل ما تكمل.`;
+      return `${f} مفيهوش استيراد Mediabunny — راجع العقد التقني في AGENTS.md وصحّح نفس الملف.`;
     }
   }
   return null;
@@ -312,13 +199,20 @@ function buildSystemPrompt(agentsMd) {
 ${agentsMd}
 
 # الأداة الوحيدة المتاحة لك
-run_terminal(command) — ده كل اللي عندك. مفيش أي أداة تانية. من خلاله لازم:
+run_terminal(command) — ده كل اللي عندك. مفيش أي أداة تانية، ومفيش أي دالة رندر جاهزة.
+من خلاله لازم:
 - تجيب أي نص (آية/تفسير) عن طريق: curl -s "<url>"
-- تحمّل الصوت عن طريق: curl -s -o assets/xxx.mp3 "<url>"
-- تكتب أي ملف (scene.html أو ملف .md) عن طريق: cat > path/to/file << 'EOF' ... EOF
-- ترندر الفيديو عن طريق: node agent.js render <path/to/scene.html>
-  (هيرجعلك سطر JSON واحد فيه success/local_path/filename/size_bytes/error)
+- تحمّل الصوت والصور عن طريق: curl -s -o assets/xxx "<url>"
+- تكتب أي ملف (scene.html، سكريبت الرندر، ملف .md) عن طريق: cat > path/to/file << 'EOF' ... EOF
+- **الرندر نفسه لازم تكتبه إنت بالكامل**: اكتب سكريبت Node.js بيستخدم Playwright
+  (الوصفة الكاملة والمُختبَرة موجودة في قسم "دليل كتابة سكريبت الرندر" في AGENTS.md فوق —
+  انسخها واستخدمها زي ما هي)، احفظه بأمر terminal، وشغّله بعد كده عن طريق terminal تاني.
 - ترفع أي ملف على الـ Release عن طريق: gh release upload $RELEASE_TAG <file> --repo $GH_REPO
+
+**مهم جدًا**: لو أي أمر terminal فشل (زي مشكلة quoting في heredoc)، **صحّح نفس المشكلة
+بدقة وأعد المحاولة** — ممنوع منعًا باتًا تستبدل المحتوى بنسخة مبسّطة أو منقوصة عشان
+"تتجنب" الخطأ. أي مشهد بينقصه نص الآية الحقيقي أو الهوية البصرية أو الخلفية هيترفض
+تلقائيًا من فحص السلامة، وهيوقف تنفيذك لحد ما تصلّحه.
 
 # معمارية تفكيرك — إلزامية
 1. **Plan-and-Solve**: أول رد منك في المهمة لازم يكون **نص عادي** (من غير أي استدعاء run_terminal)
@@ -382,8 +276,11 @@ async function runAgentLoop() {
         result = { success: false, error: 'لازم تكتب خطتك الكاملة كنص عادي الأول قبل أي أمر terminal.' };
       } else {
         result = await runTerminal(fc.args || {});
-        const warning = lightSanityCheck(fc.args.command || '', result);
-        if (warning) result.warning = warning;
+        const problem = lightSanityCheck(fc.args.command || '', result);
+        if (problem) {
+          result.success = false;
+          result.error = 'فشل فحص السلامة (إلزامي): ' + problem;
+        }
       }
 
       log(`نتيجة: ${JSON.stringify(result).slice(0, 400)}`);
@@ -451,17 +348,9 @@ async function main() {
 }
 
 // ============================================================================
-// نقطة الدخول — وضعين: agent (افتراضي) أو render (subcommand داخلي)
+// نقطة الدخول
 // ============================================================================
-const args = process.argv.slice(2);
-if (args[0] === 'render') {
-  renderVideoCli(args[1]).catch((e) => {
-    console.log(JSON.stringify({ success: false, error: e.message }));
-    process.exit(1);
-  });
-} else {
-  main().catch((err) => {
-    console.error('خطأ فادح في الـ Agent:', err);
-    process.exit(1);
-  });
-}
+main().catch((err) => {
+  console.error('خطأ فادح في الـ Agent:', err);
+  process.exit(1);
+});
