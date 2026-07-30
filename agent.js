@@ -91,6 +91,11 @@ function extractWrittenSceneFiles(command) {
   return [...new Set(matches.map((m) => m[1]))];
 }
 
+function longestArabicRun(text) {
+  const matches = text.match(/[\u0600-\u06FF]+/g) || [];
+  return matches.reduce((max, m) => Math.max(max, m.length), 0);
+}
+
 function lightSanityCheck(command, result) {
   if (!result.success) return null;
   const files = extractWrittenSceneFiles(command);
@@ -98,11 +103,73 @@ function lightSanityCheck(command, result) {
     const fullPath = path.join(WORK_DIR, f);
     if (!fs.existsSync(fullPath)) continue;
     const content = fs.readFileSync(fullPath, 'utf-8');
-    if (!/[\u0600-\u06FF]{10,}/.test(content)) {
-      return `${f} مفيهوش نص عربي حقيقي (10 حروف متصلة على الأقل) — ده معناه النص الحقيقي اللي جبته بـ curl مكتبش فعليًا جوه الملف. ممنوع تعتبر الفيديو ده جاهز أو ترفعه، صحّح نفس الملف وأعد الرندر.`;
+    // بنشيل تاجات الـ HTML (زي <span> منفصلة لكل حرف/كلمة لأنيميشن) قبل الفحص،
+    // عشان النص الحقيقي المقسّم بصريًا لا يُعاقَب وكأنه غير موجود.
+    const strippedTags = content.replace(/<[^>]+>/g, '');
+    const runLen = longestArabicRun(strippedTags);
+    const totalArabicChars = (strippedTags.match(/[\u0600-\u06FF]/g) || []).length;
+    // معيار مزدوج: إما متتالية طويلة (كلمة/آية بدون تقطيع)، أو كتلة إجمالية
+    // كافية من الحروف العربية حتى لو مقسّمة على كلمات/عناصر منفصلة بمسافات حقيقية.
+    if (runLen < 10 && totalArabicChars < 40) {
+      return `${f} مفيهوش نص عربي حقيقي كافٍ — أطول متتالية حروف عربية متصلة موجودة ` +
+        `دلوقتي طولها ${runLen} حرف بس (المطلوب 10+)، وإجمالي الحروف العربية في الملف ` +
+        `${totalArabicChars} حرف بس (المطلوب 40+ كحد أدنى بديل). ده معناه على الأغلب إن ` +
+        `النص الحقيقي اللي جبته بـ curl مكتبش فعليًا جوه الملف، أو اتقطّع لحروف منفصلة ` +
+        `كل واحد جوه عنصر بعيد عن التاني بمسافات/تاجات كتير. ممنوع تعتبر الفيديو ده جاهز ` +
+        `أو ترفعه، صحّح نفس الملف وأعد الرندر.`;
     }
     if (!content.includes('mediabunny')) {
       return `${f} مفيهوش استيراد Mediabunny — راجع العقد التقني في AGENTS.md وصحّح نفس الملف.`;
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// فحص إلزامي: قبل ما نقبل ملف "video_<رقم>_done.json"، نتأكد إن الملفات اللي
+// بيشير لها (release_video_url / release_md_url) موجودة فعليًا كـ assets على
+// الـ Release — مش بس أسماء URL اتكتبت بافتراض إن الرفع نجح.
+// ---------------------------------------------------------------------------
+function extractWrittenDoneFiles(command) {
+  const matches = [...command.matchAll(/([a-zA-Z0-9_./-]*video_[a-zA-Z0-9_.-]*_done\.json)/g)];
+  return [...new Set(matches.map((m) => m[1]))];
+}
+
+function verifyMarkerUploads(command, result) {
+  if (!result.success) return null;
+  const files = extractWrittenDoneFiles(command);
+  for (const f of files) {
+    const fullPath = path.join(WORK_DIR, f);
+    if (!fs.existsSync(fullPath)) continue;
+
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+    } catch (e) {
+      return `${f} مش JSON صالح — لازم يحتوي release_video_url و release_md_url حقيقيين.`;
+    }
+    const urls = [data.release_video_url, data.release_md_url].filter(Boolean);
+    if (urls.length < 2) {
+      return `${f} ناقصه release_video_url أو release_md_url — لازم الاتنين موجودين قبل ما تعتبر الفيديو خلص.`;
+    }
+
+    let assetNames;
+    try {
+      const out = execSync(`gh release view ${RELEASE_TAG} --repo ${GH_REPO} --json assets`, {
+        env: process.env,
+      }).toString();
+      assetNames = JSON.parse(out).assets.map((a) => a.name);
+    } catch (e) {
+      return `${f}: فشل التحقق من أصول الـ Release "${RELEASE_TAG}" عبر gh release view (${String(e.message || e).slice(0, 200)}). ` +
+        `لازم ترفع الملفين فعليًا بأمر "gh release upload ${RELEASE_TAG} <path> --repo ${GH_REPO}" قبل ما تكتب ملف العلامة ده.`;
+    }
+    for (const url of urls) {
+      const name = decodeURIComponent(url.split('/').pop() || '');
+      if (!name || !assetNames.includes(name)) {
+        return `${f} بيشير لملف "${name || url}" لكنه مش موجود فعليًا كـ asset على الـ Release "${RELEASE_TAG}" ` +
+          `(الموجود حاليًا: ${assetNames.join(', ') || 'لا شيء'}). لازم ترفعه فعليًا أولًا بـ: ` +
+          `gh release upload ${RELEASE_TAG} <المسار المحلي للملف> --repo ${GH_REPO} — ثم أعد كتابة ملف العلامة.`;
+      }
     }
   }
   return null;
@@ -276,7 +343,8 @@ async function runAgentLoop() {
         result = { success: false, error: 'لازم تكتب خطتك الكاملة كنص عادي الأول قبل أي أمر terminal.' };
       } else {
         result = await runTerminal(fc.args || {});
-        const problem = lightSanityCheck(fc.args.command || '', result);
+        const problem = lightSanityCheck(fc.args.command || '', result) ||
+          verifyMarkerUploads(fc.args.command || '', result);
         if (problem) {
           result.success = false;
           result.error = 'فشل فحص السلامة (إلزامي): ' + problem;
@@ -313,6 +381,25 @@ async function runAgentLoop() {
 }
 
 async function main() {
+  // -------------------------------------------------------------------------
+  // حارس حاسم: منع استدعاء agent.js لنفسه بشكل متداخل من جوه run_terminal.
+  // لو الـ AI (غلط أو عن قصد) نفّذ "node agent.js" كأمر terminal من جوه جلسته،
+  // ده كان بيولّد جلسة Agent كاملة تانية (Release جديد + runAgentLoop من الصفر)
+  // على نفس القرص، وملفات العلامة (video_*_done.json / TASK_COMPLETE.json) اللي
+  // بتكتبها الجلسة الداخلية كانت بتخدع الجلسة الخارجية إنها هي اللي خلصت —
+  // فيديو مختلف تمامًا (سورة عشوائية تانية) بيتسلّم على إنه نتيجة المهمة الأصلية،
+  // من غير أي تحذير. الحارس ده بيمنع السيناريو ده تمامًا من الجذر.
+  if (process.env.OFOQ_AGENT_RUNNING) {
+    console.error(
+      'خطأ فادح: تم اكتشاف استدعاء متداخل لـ agent.js من جوه جلسة تشغيل حالية بالفعل. ' +
+      'ممنوع تمامًا تنفيذ "node agent.js" كأمر terminal من جوه نفسك — دي مش أداة رندر، ' +
+      'ده نفس العقل اللي بيكلمك دلوقتي وهيبدأ جلسة تانية من الصفر فوق نفس القرص. ' +
+      'الرندر لازم يكون سكريبت Node.js منفصل تكتبه إنت بنفسك وتشغّله بـ "node اسم-السكريبت.js".'
+    );
+    process.exit(1);
+  }
+  process.env.OFOQ_AGENT_RUNNING = '1';
+
   if (!GEMINI_API_KEY) {
     console.error('GEMINI_API_KEY غير موجود في متغيرات البيئة. أوقف التنفيذ.');
     process.exit(1);
