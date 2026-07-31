@@ -72,6 +72,42 @@
   اسم المتغير كفيل إنه يفشل بصمت). لو القيمة القديمة لسه موجودة بعد الاستبدال،
   الفيديو ممكن يتصدّر بنجاح كامل بنص سورة وصوت سورة تانية، من غير أي خطأ ظاهر
   في اللوج.
+- **لو بتستبدل مصفوفة الآيات (`SURAH_VERSES`) بمحتوى جديد**: حدّد نهايتها فعليًا
+  بالبحث عن أول `];` بعد `const SURAH_VERSES = [` (مش بتخمين تعليق أو سطر معيّن
+  بعدها كعلامة نهاية) — ده أدق طريقة تضمن استبدال المصفوفة كاملة من غير ما
+  تسيب جزء قديم فاضل أو تاكل أول سطر من الكود اللي بعدها.
+- **فحص إلزامي لصحة `scene.html` قبل تشغيل سكريبت الرندر الكامل** (مش بعده):
+  افتح الصفحة headless لكام ثانية بس (من غير `?autorender=true`) والتقط أي
+  `pageerror`، زي كده:
+  ```js
+  const { chromium } = require('playwright');
+  const http = require('http');
+  const fs = require('fs');
+  const path = require('path');
+  (async () => {
+    const server = http.createServer((req, res) => {
+      fs.readFile(path.join(process.cwd(), req.url.split('?')[0]), (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200); res.end(data);
+      });
+    });
+    await new Promise(r => server.listen(0, r));
+    const port = server.address().port;
+    const browser = await chromium.launch({ channel: 'chrome' });
+    const page = await browser.newPage();
+    let errorFound = null;
+    page.on('pageerror', (err) => { errorFound = err.message; });
+    await page.goto(`http://localhost:${port}/scene.html`);
+    await page.waitForTimeout(3000);
+    await browser.close();
+    server.close();
+    if (errorFound) { console.log('SYNTAX_ERROR:', errorFound); process.exit(1); }
+    console.log('SCENE_OK');
+  })();
+  ```
+  لو طبع `SYNTAX_ERROR`، **متكملش على سكريبت الرندر الكامل خالص** — رجع اصلح
+  `scene.html` الأول. الهدف إنك تكتشف أخطاء الـ syntax في ثواني بدل ما تكتشفها
+  بعد `TimeoutError` غامض بعد دقايق من انتظار الرندر الكامل.
 
 ---
 
@@ -198,6 +234,11 @@ const finalBuffer = output.target.buffer; // ArrayBuffer فيه ملف MP4 كا�
 > `timeout` ده صراحة (أو بأي قيمة أقل)، السكريبت هيكراش بـ `TimeoutError` قبل
 > ما الرندر يخلص أصلًا، حتى لو باقي الكود كله صح 100%. انسخ السكريبت اللي تحت
 > **حرفيًا بالكامل** من غير ما تعيد كتابته من الصفر أو تختصر فيه.
+>
+> **لو اضطريت تعيد كتابة `render-runner.js` أكتر من مرة في نفس المهمة** (مثلًا
+> عشان تصلح حاجة تانية فيه)، اعمل `grep -n "8 \* 60 \* 1000" render-runner.js`
+> **قبل** ما تشغّله في كل مرة، مش بعد ما يفشل — عشان تتأكد إن النسخة اللي على
+> القرص فعليًا فيها الـ timeout الصح، مش نسخة قديمة أو ناقصة اتكتبت بالغلط.
 
 ```js
 const { chromium } = require('playwright');
@@ -296,6 +337,11 @@ async function startServer() {
    `https://api.alquran.cloud/v1/surah/{surah}/editions/quran-uthmani,ar.muyassar`
    (بيرجع الرسم العثماني + التفسير الميسر في نفس الطلب). لا داعي لتجربة editions تانية
    زي `quran-simple-clean` أولًا، ده مضيعة وقت وبيرجع بيانات ناقصة أحيانًا.
+   **شكل الـ JSON الراجع بالظبط** (لتفادي `TypeError` بسبب افتراض شكل غلط):
+   `response.data` هو **List فيه عنصرين** (مش Object فيه مفتاح `editions`) —
+   `data[0]` هو edition الرسم العثماني و`data[1]` هو edition التفسير الميسر
+   (بنفس ترتيب الطلب)، وكل واحد فيهم فيه `ayahs` (List). يعني الوصول الصح هو
+   `data[0]['ayahs']` و`data[1]['ayahs']`، مش `data['editions'][i]['ayahs']`.
 
 3. **متغيرات البيئة `$RELEASE_TAG` و`$GH_REPO`**: متاحين فعليًا الآن في أي أمر
    `run_terminal` (تم إصلاح باگ سابق كانوا فيه فاضيين). لو لأي سبب طلعوا فاضيين برضه،
