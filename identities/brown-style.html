@@ -97,13 +97,27 @@
     <script type="importmap">
     {
         "imports": {
-            "mediabunny": "https://esm.sh/mediabunny@1.50.8"
+            "mediabunny": "https://esm.sh/mediabunny@1.50.8",
+            "@mediabunny/aac-encoder": "https://esm.sh/@mediabunny/aac-encoder@1.50.8?deps=mediabunny@1.50.8"
         }
     }
     </script>
 
     <script type="module">
         import { Output, Mp4OutputFormat, WebMOutputFormat, BufferTarget, CanvasSource, AudioBufferSource, QUALITY_HIGH, canEncodeAudio } from 'mediabunny';
+
+        // ================================================================
+        // منطقة قابلة للتعديل لكل فيديو جديد — غيّر هنا بس، وسيب باقي الملف
+        // زي ما هو (منطق الرسم/الرندر/الـ hooks). الترتيب زي ما هو مطلوب في
+        // AGENTS.md عند بناء scene.html من الهوية دي:
+        //   1) SURAH_NUMBER  — رقم السورة بصيغة 3 أرقام (مستخدم في رابط الصوت)
+        //   2) RECITER_ID    — مجلد القارئ في everyayah.com
+        //   3) OUTPUT_FILENAME — اسم ملف الإخراج (بدون امتداد)، مستخدم في مكان واحد بس
+        //   4) SURAH_VERSES  — تحت في القسم التاني (النص والتفسير)
+        // ================================================================
+        const SURAH_NUMBER = '094';       // مثال: سورة الشرح — غيّره لرقم السورة الجديدة
+        const RECITER_ID = 'Alafasy_128kbps';
+        const OUTPUT_FILENAME = 'Quran_Shorts_Ash_Sharh';
 
         // --- 1. CONFIG & PALETTE (Vertical Shorts 1080x1920) ---
         let CONFIG = { fps: 60, width: 1080, height: 1920, duration: 35.0 };
@@ -127,6 +141,7 @@
             easeInOutCubic: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
         };
 
+        // ============ نهاية منطقة التعديل — الجزء 4/4: نص الآيات والتفسير ============
         // Verses Text with Tafseer Al-Muyassar (سورة الشرح)
         const SURAH_VERSES = [
             {
@@ -288,7 +303,7 @@
 
             for (let i = 1; i <= 8; i++) {
                 const ayahNum = String(i).padStart(3, '0');
-                const url = `https://www.everyayah.com/data/Alafasy_128kbps/094${ayahNum}.mp3`;
+                const url = `https://www.everyayah.com/data/${RECITER_ID}/${SURAH_NUMBER}${ayahNum}.mp3`;
                 try {
                     const res = await fetch(url);
                     const arrayBuf = await res.arrayBuffer();
@@ -611,7 +626,11 @@
                     window.renderResult = { blob, url, container: attempt.container };
 
                     // جسر إضافي لسكريبت الـ Playwright (render-runner.js) — راجع العقد التقني في AGENTS.md
-                    window.__renderFilename = `Quran_Shorts_Ash_Sharh.${attempt.container}`;
+                    // امتداد الملف هنا بيتحدد فعليًا من نوع الحاوية الحقيقي اللي نجح
+                    // (mp4 أو webm حسب attempt.container) — ممنوع لأي سكريبت خارجي
+                    // (زي render-runner.js) يغيّر أو "يعيد تسمية" الامتداد ده لاحقًا،
+                    // لأن ملف .webm بامتداد .mp4 هيبقى فيديو تالف/غير متوافق.
+                    window.__renderFilename = `${OUTPUT_FILENAME}.${attempt.container}`;
                     window.__renderBase64 = arrayBufferToBase64(buffer);
 
                     window.renderStatus = 'completed';
@@ -622,7 +641,7 @@
 
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `Quran_Shorts_Ash_Sharh.${attempt.container}`;
+                    a.download = `${OUTPUT_FILENAME}.${attempt.container}`;
                     a.click();
 
                     statusText.textContent = "تم التصدير والتحميل بنجاح ✓";
@@ -693,4 +712,4 @@
         window.addEventListener('load', init);
     </script>
 </body>
-  </html>
+    </html>
