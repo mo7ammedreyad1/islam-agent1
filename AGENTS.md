@@ -22,18 +22,28 @@
 كامل من الصفر: جلب النص والصوت من مصادر موثوقة، كتابة `scene.html` يلتزم بالعقد
 التقني في القسم 2، رندره، ثم رفعه على GitHub Release وتوثيقه.
 
-### هوية الفيديو (الشكل والروح البصرية) — منفصلة عن هذا الملف
-هوية كل فيديو (الخطوط، الألوان، التخطيط، الإحساس العام) **مش موجودة هنا**، وموجودة
-بدل كده في ملفات `.md` منفصلة جوه مجلد [`video-identities/`](./video-identities/)،
-كل ملف يوصف روح فيديو معيّن.
+### هوية الفيديو — قسمين منفصلين
 
-- **اسم ملف الهوية المطلوب يُحدَّد صراحة في وصف المهمة نفسها.** لو المهمة قالتلك
-  تستخدم هوية معيّنة (مثلًا `video-identities/quran-tafsir-shorts.md`)، افتحه واتبع
-  الوصف اللي فيه بالحرف قبل ما تكتب أي `scene.html`.
+**1. الإحساس والمحتوى** (نوع الفيديو، هل فيه تفسير ولا لأ، الطابع العام) موصوف في
+ملفات `.md` جوه [`video-identities/`](./video-identities/)، كل ملف يوصف نوع فيديو
+معيّن بالكلام.
+
+**2. الشكل البصري والتقني** (الخطوط، الألوان، التخطيط، منطق الرسم على الـ canvas،
+وطريقة جلب الأصول، والـ render hooks) **مش وصف بالكلام**، وموجود كـ **كود
+`scene.html` كامل وشغّال فعليًا** جوه [`identities/`](./identities/) — كل ملف هوية
+هناك مرجع حرفي، مش نص توضيحي.
+
+- **اسم ملف الهوية المطلوب (من `video-identities/` و/أو `identities/`) يُحدَّد
+  صراحة في وصف المهمة نفسها.** لو المهمة قالتلك تستخدم هوية معيّنة، افتح الاتنين
+  (لو موجودين) قبل ما تكتب أي حرف في `scene.html`.
 - لو المهمة معدّتش أي اسم ملف هوية صراحة، متفترضش هوية من عندك — ارجع للمستخدم
-  واسأله أي ملف من `video-identities/` يستخدم.
-- ملفات الهوية دي وصف للشكل والإحساس (كلام، مش كود جاهز يُنسخ) — التزم بروحها في
-  كتابتك للـ `scene.html`، مش بنسخها حرفيًا.
+  واسأله أي ملف يستخدم.
+- ملفات `video-identities/*.md` وصف بالكلام — التزم بروحه، مش نسخ حرفي.
+- ملفات `identities/*.html` **كود حرفي جاهز** — خد نسخة كاملة منه كنقطة انطلاق لـ
+  `scene.html` الجديد، وعدّل فيه بس المحتوى (نص الآيات، التفسير، اسم السورة،
+  القارئ...) حسب المهمة. **ممنوع تغيّر أو تشيل** منطق الرسم، الـ render hooks، أو
+  طريقة جلب الأصول اللي فيه — دول جزء من العقد التقني الإلزامي في القسم 2، مش
+  تفاصيل شكلية تقدر تعدّلها.
 
 ---
 
@@ -87,44 +97,57 @@ const finalBuffer = output.target.buffer; // ArrayBuffer فيه ملف MP4 كا�
 لا يوجد export اسمه `VideoCodec` أو `AudioCodec` وقت التشغيل (هو TypeScript type بس) —
 **ممنوع تحاول تستورده أو "تكتشفه" بتجربة**، ده هيفشل دايمًا ومضيعة وقت.
 
-### الخلفية: تحميل حقيقي من Pixabay + احتياطي SVG
-- **الافتراضي**: صورة خلفية حقيقية تُجلب من API خارجي (مثل Pixabay) — **يتم تحميلها عن طريق
-  `curl` جوه `run_terminal` فقط**، مع مفتاح الـ API مقروء من `$PIXABAY_API_KEY` (متغير بيئة
-  سري، موجود بالفعل، ممنوع طباعته أو كتابته جوه أي ملف). احفظها محليًا في `assets/background.jpg`
-  (أو `.png` حسب نوع الملف الراجع)، وخلي `scene.html` يشير للمسار المحلي النسبي بس
-  (`assets/background.jpg`) — **ممنوع منعًا باتًا كتابة مفتاح الـ API جوه `scene.html`
-  نفسه أو جوه أي ملف تاني بيتكتب على القرص**، لأنه ممكن يترفع بالغلط على الـ Release.
-  مثال أمر التحميل (استخدم رابط بحث مناسب لمحتوى المهمة):
-  ```bash
-  curl -s "https://pixabay.com/api/?key=$PIXABAY_API_KEY&q=nature+landscape&image_type=photo&orientation=<horizontal أو vertical حسب الأبعاد>" \
-  | node -e "const d=JSON.parse(require('fs').readFileSync(0));console.log(d.hits[0].largeImageURL)" \
-  | xargs -I{} curl -sL -o assets/background.jpg {}
-  ```
-- **بديل احتياطي**: لو المفتاح غير متاح أو التحميل فشل، ارجع لخلفية SVG مرسومة جوه نفس
-  ملف الـ HTML (تدرجات + عناصر بسيطة). لو استخدمت SVG كصورة `<img>` (مش inline)، لازم
-  تحطه كـ data URI مع `encodeURIComponent` كامل للمحتوى (مش استبدال يدوي لبعض الحروف بس)
-  — أي `#` أو حرف خاص من غير encoding سليم بيكسر تحميل الصورة (`Failed to load SVG image`).
-- **قاعدة تجنّب "canvas tainted"**: لازم `scene.html` يتفتح دايمًا عن طريق سيرفر HTTP محلي
-  (زي اللي في وصفة الرندر تحت)، **مش** بمسار `file://` مباشر — وأي صورة بتترسم على الـ
-  canvas لازم تكون من نفس الأصل (نفس السيرفر المحلي) أو من مصدر تم تحميله محليًا بالفعل
-  عن طريق curl. خرق القاعدة دي بيدّي خطأ `VideoFrames can't be created from tainted sources`.
-  طبقة تعتيم (overlay) غامقة فوق أي خلفية حقيقية دايمًا إلزامية عشان النص يفضل واضح.
+### الأصول (صوت/صورة): fetch مباشر بالرابط جوه المتصفح — من غير تحميل محلي بـ curl
+**ممنوع تحميل أي أصل (صوت أو صورة) بـ `curl` جوه `run_terminal` وحفظه في `assets/`
+والإشارة له بمسار محلي.** كل أصل يتجاب **مباشرة جوه كود `scene.html` نفسه وقت
+التشغيل** بـ `fetch()` على الرابط الحقيقي، بالظبط زي الباترن الموجود في ملفات
+`identities/*.html` (مثال: الصوت بيتجاب بـ `fetch(url)` → `arrayBuffer()` →
+`decodeAudioData()`، من غير أي خطوة تحميل مسبقة على القرص).
 
-### عقد النتيجة النهائية اللي سكريبت الرندر بتاعك لازم يلتزم بيه
-لازم سكريبت الرندر (الملف اللي هتكتبه إنت، مش أداة جاهزة) يضبط المتغيرات دي جوه
-صفحة `scene.html` نفسها بالظبط، عشان تقدر تراقبها من الـ Node script:
+- **الصوت**: دايمًا `fetch()` مباشر من `everyayah.com` (المسار في القسم 4) — نفس
+  الباترن الموجود في هوية الـ `identities/*.html` المستخدمة.
+- **الصورة/الخلفية**: مش كل الهويات محتاجة صورة خارجية — بعضها (زي
+  `identities/brown-style.html`) بيرسم الخلفية بالكامل بتدرجات الـ canvas من غير
+  أي صورة. لو الهوية اللي بتستخدمها فعلًا محتاجة صورة خارجية، اجلبها بـ
+  `<img crossOrigin="anonymous">` أو `fetch()` من رابط مباشر بيدعم CORS — من غير
+  أي API key سري. لو المصدر مش بيدعم CORS، ارجع لخلفية مرسومة بالكانفاس بدل ما
+  تحاول تحمّلها.
+- **قاعدة تجنّب "canvas tainted"**: لازم `scene.html` يتفتح دايمًا عن طريق سيرفر
+  HTTP محلي (زي اللي في وصفة الرندر تحت)، **مش** بمسار `file://` مباشر. أي صورة
+  بتترسم على الـ canvas، حتى لو من مصدر خارجي، لازم تتحمّل بـ
+  `crossOrigin = 'anonymous'` وإلا خرق القاعدة دي بيدّي خطأ `VideoFrames can't be
+  created from tainted sources`. الصوت مالوش المشكلة دي أصلاً لأنه مش بيترسم على
+  الـ canvas. طبقة تعتيم (overlay) غامقة فوق أي خلفية حقيقية دايمًا إلزامية عشان
+  النص يفضل واضح.
 
-- في البداية: `window.__ofoqStatus = 'pending';`
-- عند النجاح:
+### عقد الـ render hooks الإلزامي — مطابق تمامًا لما هو موجود في ملفات `identities/*.html`
+كل ملف `identities/*.html` (ومن ثم كل `scene.html` مبني عليه) لازم يحتوي فعليًا على
+الـ hooks دي شغّالة، مش وصف نظري — انسخها زي ما هي من الهوية المستخدمة، ومنعًا باتًا
+تغييرها أو الرجوع لأسماء متغيرات قديمة:
+
+- `window.renderStatus`: يبدأ `'loading'`، يبقى `'ready'` لما كل الأصول تتجهز،
+  `'rendering'` أثناء التصدير، وفي النهاية `'completed'` أو `'error'`.
+- `window.renderProgress`: رقم من `0.0` إلى `1.0` بيتحدّث أثناء `'rendering'`.
+- `window.startVideoRender()`: `async function` تبدأ التصدير فورًا وترجع `Promise`.
+- دعم `?autorender=true` في رابط الصفحة: لو موجود، الصفحة تستدعي
+  `window.startVideoRender()` لوحدها بعد التحميل من غير أي تفاعل يدوي (زرار).
+- حدث `video-render-complete` يتطلق على الـ `window`
+  (`window.dispatchEvent(new CustomEvent('video-render-complete', {...}))`) فور
+  اكتمال التصدير بنجاح.
+- عند النجاح، النتيجة تتخزن في `window.renderResult` (زي الهوية الأصلية) **بالإضافة**
+  لمتغيرين لازمين عشان سكريبت الـ Playwright يقدر ياخد الفيديو فعليًا (الـ `Blob`
+  object مينفعش يترجع مباشرة من `page.evaluate`):
 ```js
-  window.__ofoqFilename = "اسم-الملف.mp4";
-  window.__ofoqBase64 = arrayBufferToBase64(finalBuffer); // دالة تحويل base64 قياسية
-  window.__ofoqStatus = 'done';
+  const finalBuffer = output.target.buffer; // ArrayBuffer من Mediabunny (القسم اللي فوق)
+  window.__renderFilename = "اسم-الملف.mp4";
+  window.__renderBase64 = arrayBufferToBase64(finalBuffer); // دالة base64 قياسية
+  window.renderStatus = 'completed';
+  window.dispatchEvent(new CustomEvent('video-render-complete', { detail: { filename: window.__renderFilename } }));
 ```
 - عند الفشل (جوه try/catch حوالين كل حاجة):
 ```js
-  window.__ofoqStatus = 'error';
-  window.__ofoqError = err.message;
+  window.renderStatus = 'error';
+  window.__renderError = err.message;
 ```
 
 ### دليل كتابة سكريبت الرندر — انسخه حرفيًا، محدّث وشغّال فعليًا
@@ -166,20 +189,24 @@ async function startServer() {
   page.on('requestfailed', (req) => failedRequests.push(`${req.url()} — ${req.failure()?.errorText}`));
   page.on('response', (res) => { if (res.status() >= 400) failedRequests.push(`${res.url()} — HTTP ${res.status()}`); });
 
-  await page.goto(`http://localhost:${port}/scene.html`);
-  await page.waitForFunction(() => window.__ofoqStatus === 'done' || window.__ofoqStatus === 'error', { timeout: 8 * 60 * 1000 });
+  // ?autorender=true بيخلي الصفحة تستدعي window.startVideoRender() لوحدها بعد التحميل
+  await page.goto(`http://localhost:${port}/scene.html?autorender=true`);
+  await page.waitForFunction(
+    () => window.renderStatus === 'completed' || window.renderStatus === 'error',
+    { timeout: 8 * 60 * 1000 }
+  );
 
-  const status = await page.evaluate(() => window.__ofoqStatus);
-  const result = { success: status === 'done', console_logs: consoleLogs.slice(-50), failed_requests: failedRequests };
+  const status = await page.evaluate(() => window.renderStatus);
+  const result = { success: status === 'completed', console_logs: consoleLogs.slice(-50), failed_requests: failedRequests };
 
-  if (status === 'done') {
-    const filename = await page.evaluate(() => window.__ofoqFilename);
-    const base64 = await page.evaluate(() => window.__ofoqBase64);
+  if (status === 'completed') {
+    const filename = await page.evaluate(() => window.__renderFilename);
+    const base64 = await page.evaluate(() => window.__renderBase64);
     fs.writeFileSync(filename, Buffer.from(base64, 'base64'));
     result.filename = filename;
     result.size = fs.statSync(filename).size;
   } else {
-    result.error = await page.evaluate(() => window.__ofoqError);
+    result.error = await page.evaluate(() => window.__renderError);
   }
 
   await browser.close();
@@ -214,11 +241,13 @@ async function startServer() {
 
 الأخطاء دي حصلت فعليًا في تشغيلات حقيقية سابقة. اتجنبها من البداية، متعملش نفس التجربة والخطأ تاني:
 
-1. **تحميل الصوت**: استخدم `curl -sL` (بحرف L إجباري) و`https://` دايمًا مع `everyayah.com` —
-   مرة سابقة استُخدم `http://` بدون `-L`، فالسيرفر عمل 301 redirect وترتّب عليه تحميل
-   صفحة HTML صغيرة (حوالي 166 بايت) باسم `.mp3` بدل الصوت الحقيقي. **بعد أي تحميل صوت،
-   تأكد إن حجم الملف بالكيلوبايتات مش بايتات قليلة** (`ls -la assets/`) قبل ما تكمل — لو
-   الحجم صغير غير طبيعي (أقل من ~5 كيلوبايت)، الملف على الأغلب صفحة خطأ مش صوت حقيقي.
+1. **جلب الصوت**: استخدم `fetch()` مباشر جوه `scene.html` (مش `curl` منفصل) على رابط
+   `https://` من `everyayah.com` دايمًا (مش `http://`) — لينك `http://` أو ريدايركت
+   غير متوقَّع ممكن يرجّع صفحة HTML صغيرة (حوالي 166 بايت) باسم `.mp3` بدل الصوت
+   الحقيقي. **بعد أي `fetch()` للصوت، تحقق إن حجم الـ `ArrayBuffer` بالكيلوبايتات مش
+   بايتات قليلة** (`console.log(arrayBuffer.byteLength)`) قبل ما تكمل — لو الحجم صغير
+   غير طبيعي (أقل من ~5 كيلوبايت)، الملف على الأغلب صفحة خطأ مش صوت حقيقي، وهتلاقيه
+   واضح كمان في `failed_requests` من سكريبت الرندر لو رجع كود HTTP خطأ.
 
 2. **نص القرآن**: استخدم مباشرة من أول مرة:
    `https://api.alquran.cloud/v1/surah/{surah}/editions/quran-uthmani,ar.muyassar`
@@ -246,9 +275,12 @@ async function startServer() {
    تجاهل التاجات). لو فشل الفحص، الرسالة بترجعلك بالظبط طول أطول متتالية وإجمالي
    العدد الحاليين — استخدمهم للتشخيص بدل التخمين العشوائي لسبب الفشل.
 
-7. **الخلفية والصور لازم تتحمّل محليًا وتتفتح عن طريق سيرفر HTTP محلي، مش `file://`**
-   — وإلا الـ canvas بيبقى "tainted" ويفشل الرندر بـ `VideoFrames can't be created
-   from tainted sources`. راجع "دليل كتابة سكريبت الرندر" في القسم 2.
+7. **`scene.html` لازم يتفتح دايمًا عن طريق سيرفر HTTP محلي، مش `file://`** — حتى لو
+   كل الأصول بتتجاب بـ `fetch()` مباشر من روابط خارجية (مفيش تحميل محلي للأصول
+   أصلًا). فتح الملف بـ `file://` بيكسر `fetch()`/`import` وبيخلي أي صورة على الـ
+   canvas "tainted"، فيفشل الرندر بـ `VideoFrames can't be created from tainted
+   sources`. سيرفر بسيط جدًا كفاية — راجع "دليل كتابة سكريبت الرندر" في القسم 2
+   (نفس السيرفر البسيط بيفتح الصفحة، مفيش داعي لأي حاجة أعقد).
 
 8. **قناة المتصفح لازم تكون `chrome` صراحة** في `chromium.launch({ channel: 'chrome' })`
    — لأن الـ workflow بيثبّت القناة دي بس (`npx playwright install --with-deps chrome`)،
