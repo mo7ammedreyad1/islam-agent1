@@ -1,121 +1,199 @@
 # هوية: `ivory-frame`
 
 > اسم مقترح بس — غيّره لأي اسم تاني تحبه وسمّي الملف بيه (`identities/<اسمك>.md`).
-> المواصفة دي مستخرجة بدقة من ملف HTML كان موجود عندك، وبتغطي **التصميم فقط**
-> (الشكل، الألوان، الحركة). أي حاجة خاصة بالتصدير اتشالت تمامًا — راجع الملاحظة
-> في آخر الملف.
+> **النسخة دي فيها كود JS حرفي كامل** (مش وصف نثري بس) لكل نقطة تصميمية —
+> انسخه زي ما هو في `scene.html`، حرفًا بحرف، بالإضافة للهيكل العام الموحّد في
+> `AGENTS.md` القسم 2. النقط `(1)`, `(2)`, `(3)` تحت مطابقة لنفس الترقيم في
+> الهيكل الموحّد.
 
 ## نظرة عامة
 - **الإحساس العام**: هادئ، نظيف، تحريري (editorial)، إضاءة نهارية، عمق بصري من
   صورة خلفية حقيقية + تعتيم قوي، تباين عالي بين النص الأبيض والخلفية.
-- **الاستخدام المناسب**: مقاطع قرآنية قصيرة (Shorts) **بدون تفسير** — آية أو
-  آيات بالتتابع بس، من غير بطاقة تفسير منفصلة.
-- **أبعاد الكانفاس**: **720 × 1280 بكسل بالظبط** (نسبة 9:16، أقل كثافة من
-  1080×1920 المعتاد في هويات تانية — التزم بالرقمين دول بالحرف، مش تقريب أو
-  تكبير).
-- **معدل الفريمات**: 60fps.
+- **الاستخدام المناسب**: مقاطع قرآنية قصيرة (Shorts) **بدون تفسير**.
+- **أبعاد الكانفاس**: **720 × 1280 بكسل بالظبط** (نسبة 9:16).
 
-## 1. الألوان
-- **خلفية أساسية** (تترسم قبل أي حاجة، وتفضل ظاهرة لو الصورة فشلت تتحمل):
-  تدرج خطي رأسي بـ `createLinearGradient(0, 0, 0, height)` من `#FFFFFF`
-  (أعلى، stop عند 0) إلى `#E5E5E5` (أسفل، stop عند 1).
-- **طبقة تعتيم فوق الصورة**: تدرج شعاعي (radial gradient) مركزه منتصف الكانفاس
-  بالظبط:
-  - نصف القطر الداخلي = `width / 4`، اللون عنده `rgba(0, 0, 0, 0.20)`.
-  - نصف القطر الخارجي = `height / 1.5`، اللون عنده `rgba(0, 0, 0, 0.75)`.
-- **لون نص اسم السورة**: `#FFFFFF` خالص.
-- **لون نص اسم القارئ**: `rgba(255, 255, 255, 0.85)`.
-- **لون نص الآية**: `#FFFFFF` خالص.
-- **خط الفاصل تحت الهيدر**: `rgba(255, 255, 255, 0.3)`.
-- **ظل الهيدر** (اسم السورة + القارئ): `rgba(0, 0, 0, 0.65)`، `blur: 10`،
-  `offsetY: 3`، `offsetX: 0`.
-- **ظل الآية الرئيسية**: `rgba(0, 0, 0, 0.8)`، `blur: 15`، `offsetY: 4`،
-  `offsetX: 0`.
+---
 
-## 2. الخطوط
-- **خط الآيات**: `Amiri`، وزن **700 (Bold)**. الحجم متغيّر حسب طول النص:
-  **60px** لو طول نص الآية ≤ 30 حرف، **52px** لو أطول من كده. Fallback:
-  `Georgia, 'Times New Roman', serif`.
-- **خط اسم السورة**: `Reem Kufi`، وزن **700**، حجم **48px**.
-- **خط اسم القارئ**: `Reem Kufi`، وزن **500**، حجم **26px**.
-- **مصدر الخطوط**: Google Fonts —
-  `Amiri:ital,wght@0,400;0,700;1,400;1,700` و `Reem+Kufi:wght@400..700`.
-- **إلزامي**: تأكد من تحميل كل وزن مستخدم فعليًا بـ `document.fonts.load(...)`
-  لكل تركيبة (وزن+حجم+اسم) قبل أول رسم فعلي على الكانفاس.
+## (1) CONFIG + الخطوط + أدوات مساعدة — كود حرفي
 
-## 3. التخطيط والتموضع (بالنسبة لكانفاس 720×1280)
-- **اسم السورة**: `textAlign: center`، `textBaseline: middle`،
-  `x = width/2`، `y = 120px`.
-- **اسم القارئ**: نفس المحاذاة، `x = width/2`، `y = 180px`.
-- **خط الفاصل**: أفقي عند `y = 220px`، من `x = centerX - 80` لـ
-  `x = centerX + 80` (الطول 160px)، `lineWidth: 2px`.
-- **الآية**: منتصفة أفقيًا حول `centerX = width/2`، ورأسيًا حول
-  `centerY = height/2 = 640px` (قبل أي إزاحة حركية — راجع قسم 5). أقصى عرض
-  للسطر الواحد **580px**، تباعد بين الكلمات **14px**، ارتفاع السطر =
-  `حجم الخط × 1.5`.
-- **مفيش بطاقة تفسير في التصميم ده خالص** — الآية بس على الشاشة.
+```js
+// أبعاد وإعدادات الهوية دي تحديدًا — width/height/fps بس (duration بتتحسب تلقائي
+// من صوت الآيات الحقيقي جوه preloadEveryAyahQuranAudio في الهيكل الموحّد)
+let CONFIG = { fps: 60, width: 720, height: 1280, duration: 0 };
 
-## 4. الخلفية والزخرفة
-- **صورة خلفية حقيقية** (مش رسم canvas بحت): تتحمّل بـ
-  `<img crossOrigin="anonymous">` من رابط مباشر يدعم CORS، وترسم بطريقة
-  **"cover fit"**: تملأ الكانفاس بالكامل (`dw × dh`) مع الحفاظ على النسبة
-  الأصلية للصورة، وقص أي زيادة من المنتصف (`scale = max(dw/imgW, dh/imgH)`).
-- **زووم تدريجي بطيء طول الفيديو كله** (مش لكل مشهد لوحده): يبدأ من `1.05×`
-  ويوصل لـ `1.05 + (progress × 0.08)` — يعني أقصى زووم `1.13×` عند آخر
-  ثانية، حيث `progress = الوقت_الحالي / المدة_الكلية`.
-- **طبقة التعتيم الشعاعي** (قسم 1) بتترسم فوق الصورة **إلزاميًا** — بدونها
-  النص مش هيبقى واضح.
-- **لو الصورة فشلت تتحمل**: ارجع للتدرج الخطي الأبيض/الرمادي في قسم 1 بس
-  (من غير أي صورة)، واستمر في التنفيذ عادي من غير ما توقف.
+const FONT_STACK = "'Amiri', 'Georgia', 'Times New Roman', serif";
 
-## 5. الحركة والتوقيت
-- **ظهور الهيدر** (اسم السورة + القارئ + الخط الفاصل): fade-in **خطي (linear،
-  مش easing)** على مدار **أول 1.5 ثانية من الفيديو كله** (مش لكل مشهد) —
-  `alpha = clamp01(الوقت_الحالي / 1.5)`.
-- **كل آية (مشهد/cue)**: fade-in **0.6 ثانية** من بداية ظهورها، fade-out
-  **0.5 ثانية** قبل نهايتها، بدالة easing:
-  `easeOutCubic: t => 1 - Math.pow(1 - t, 3)`.
-- **أثناء الـ fade**: `alpha = القيمة بعد الـ easing`، إزاحة رأسية
-  `offsetY = (1 - القيمة_بعد_الـ_easing) × 20px` (تبدأ 20px تحت وتوصل صفر)،
-  و`scale` من `0.96` لـ `1.0`.
-- **الترتيب الهندسي للـ transform**: `translate(centerX, centerY - offsetY)`
-  ثم `scale(s, s)` ثم `translate(-centerX, -centerY)` — يعني التكبير والإزاحة
-  لازم يدوروا حوالين **مركز الكانفاس بالظبط**، مش حوالين نقطة الأصل (0,0).
+// صورة الخلفية الثابتة لهذه الهوية (جزء من التصميم، مش محتوى متغيّر)
+const BG_IMAGE_URL = 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=1920&auto=format&fit=crop';
 
-## 6. عرض النص
-- **خوارزمية توزيع عربي RTL كلمة بكلمة**: قيس عرض كل كلمة بـ
-  `ctx.measureText`، جمّعها في أسطر بحيث مجموع عرض الكلمات + الفراغات بينها
-  ميعديش `maxWidth` (580px)، وابدأ سطر جديد لو عدى.
-- **رصف كل سطر**: من أقصى اليمين لليسار (أول كلمة في السطر تبدأ من أقصى يمين
-  عرض السطر نفسه، مش من حافة الكانفاس)، والسطر كله متمركز أفقيًا حول
-  `width/2`.
-- **حجم خط الآية ديناميكي** حسب طول النص (عتبة 30 حرف تفصل بين 60px و52px)
-  — مش حجم ثابت واحد لكل الآيات.
+let bgImage = null;
 
-## 7. عناصر متكررة تانية
-- **مفيش شعار أو watermark أو حدود زخرفية ثابتة** في التصميم ده — الاعتماد كله
-  على الصورة الحقيقية + طبقة التعتيم + النص الأبيض بالظل.
-- **الهيدر ثابت طول الفيديو** (مش بيتغيّر أو يختفي بين الآيات)، عكس بطاقة
-  الآية اللي بتتغيّر مع كل مشهد.
+// تحميل صورة الخلفية + التأكد من تحميل الخطوط — بيتنادى تلقائيًا من الهيكل
+// الموحّد (القسم 2) لو الاسم ده بالظبط: preloadDesignAssets
+async function preloadDesignAssets() {
+    try {
+        bgImage = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error("فشل تحميل صورة الخلفية"));
+            img.src = BG_IMAGE_URL;
+        });
+        logToConsole("تم تحميل صورة الخلفية بنجاح.");
+    } catch (err) {
+        logToConsole(err.message + " — هيتم الاعتماد على التدرج الافتراضي.", 'warn');
+    }
+
+    try {
+        await document.fonts.load("700 48px 'Reem Kufi'");
+        await document.fonts.load("500 26px 'Reem Kufi'");
+        await document.fonts.load("700 60px 'Amiri'");
+        logToConsole("اكتمل تحميل خطوط Amiri و Reem Kufi.");
+    } catch (e) {
+        logToConsole("تنبيه: تعذر التأكد من تحميل الخطوط بأمان.", 'warn');
+    }
+}
+
+// دالة رسم صورة بطريقة "cover fit" مع دعم الزووم — أداة مساعدة لهذه الهوية
+function drawMediaCover(el, dx, dy, dw, dh, radius = 0, zoom = 1) {
+    const dims = { w: el.width || el.naturalWidth, h: el.height || el.naturalHeight };
+    const scale = Math.max(dw / dims.w, dh / dims.h) * zoom;
+    const sw = dw / scale, sh = dh / scale;
+    const sx = (dims.w - sw) / 2, sy = (dims.h - sh) / 2;
+    ctx.save();
+    if (radius > 0) { ctx.beginPath(); ctx.roundRect(dx, dy, dw, dh, radius); ctx.clip(); }
+    ctx.drawImage(el, sx, sy, sw, sh, dx, dy, dw, dh);
+    ctx.restore();
+}
+```
+
+## (2) `buildParsedScenes()` — كود حرفي
+يستخدم `RAW_CUES` اللي الهيكل الموحّد بيملاها تلقائيًا (بتوقيت محسوب من مدة
+الصوت الحقيقية لكل آية، مش أرقام يدوية):
+
+```js
+function buildParsedScenes() {
+    parsedScenes = RAW_CUES.map(cue => {
+        const fontSize = cue.text.length > 30 ? 52 : 60;
+        const font = `700 ${fontSize}px ${FONT_STACK}`;
+        const words = layoutArabicParagraph(cue.text, font, 580, 14, fontSize * 1.5, CONFIG.height / 2);
+        return { ...cue, font, words };
+    });
+}
+```
+
+## (3) دوال الرسم + `drawSceneAtTime` — كود حرفي
+
+```js
+function drawTopHeader(time, surahDisplayName, reciterDisplayName) {
+    const fadeInDuration = 1.5;
+    const alpha = clamp01(time / fadeInDuration);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.65)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 3;
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = `700 48px 'Reem Kufi', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(surahDisplayName, CONFIG.width / 2, 120);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.font = `500 26px 'Reem Kufi', sans-serif`;
+    ctx.fillText(reciterDisplayName, CONFIG.width / 2, 180);
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(CONFIG.width / 2 - 80, 220);
+    ctx.lineTo(CONFIG.width / 2 + 80, 220);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawSceneAtTime(time) {
+    state.currentTime = time;
+
+    const grad = ctx.createLinearGradient(0, 0, 0, CONFIG.height);
+    grad.addColorStop(0, '#FFFFFF');
+    grad.addColorStop(1, '#E5E5E5');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
+
+    if (bgImage) {
+        const totalProgress = clamp01(time / CONFIG.duration);
+        const zoom = 1.05 + (totalProgress * 0.08);
+        drawMediaCover(bgImage, 0, 0, CONFIG.width, CONFIG.height, 0, zoom);
+    }
+
+    const overlayGrad = ctx.createRadialGradient(
+        CONFIG.width / 2, CONFIG.height / 2, CONFIG.width / 4,
+        CONFIG.width / 2, CONFIG.height / 2, CONFIG.height / 1.5
+    );
+    overlayGrad.addColorStop(0, 'rgba(0, 0, 0, 0.20)');
+    overlayGrad.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
+    ctx.fillStyle = overlayGrad;
+    ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
+
+    // ⚠️ surahDisplayName و reciterDisplayName لازم ياخدوا قيمتهم من محتوى
+    // المهمة الفعلي (اسم السورة والقارئ)، مش نص ثابت — دول متغيّرات محتوى
+    // زي ما هو موضّح في قسم "المحتوى المتغيّر" تحت
+    drawTopHeader(time, SURAH_DISPLAY_NAME, RECITER_DISPLAY_NAME);
+
+    if (parsedScenes.length === 0) return;
+    const activeScene = parsedScenes.find(s => time >= s.start && time < s.end) || parsedScenes[parsedScenes.length - 1];
+
+    const sceneDuration = activeScene.end - activeScene.start;
+    const localTime = time - activeScene.start;
+    const fadeInDuration = 0.6, fadeOutDuration = 0.5;
+    let progressFactor = 1.0;
+    if (localTime < fadeInDuration) progressFactor = localTime / fadeInDuration;
+    else if (localTime > sceneDuration - fadeOutDuration) progressFactor = (sceneDuration - localTime) / fadeOutDuration;
+
+    const b = Easing.easeOutCubic(clamp01(progressFactor));
+    const alpha = b;
+    const offsetY = (1.0 - b) * 20;
+    const scale = 0.96 + (0.04 * b);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const centerX = CONFIG.width / 2, centerY = CONFIG.height / 2;
+    ctx.translate(centerX, centerY - offsetY);
+    ctx.scale(scale, scale);
+    ctx.translate(-centerX, -centerY);
+
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = activeScene.font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    activeScene.words.forEach(word => ctx.fillText(word.text, word.x, word.y));
+    ctx.restore();
+}
+```
+
+---
 
 ## المحتوى المتغيّر لكل فيديو (مش جزء من "الستايل")
-- نص كل آية، اسم السورة، اسم القارئ — بيتحددوا من المهمة نفسها، زي أي هوية
-  تانية.
-- **توقيت كل آية (بداية/نهاية) لازم يتحسب من المدة الفعلية لصوتها الحقيقي بعد
-  فك الترميز (`AudioBuffer.duration`)، مش أرقام ثابتة مكتوبة يدويًا** — ده
-  تطبيق مباشر لقاعدة إلزامية في `AGENTS.md` (القسم 4، البند 2)، وبيُلغي أي
-  توقيتات كانت مكتوبة يدويًا في أي مصدر إلهام لهذا التصميم.
-- **الصوت لازم يُجلب لكل آية على حدة من `everyayah.com`** (`fetch()` مباشر،
-  زي القسم 2 في `AGENTS.md`)، مش ملف صوتي واحد لسورة كاملة بروابط ومصادر
-  تانية.
+- `SURAH_DISPLAY_NAME` و`RECITER_DISPLAY_NAME`: ثابتين (const) بيتحددوا من
+  المهمة، بيستخدمهم `drawSceneAtTime` زي ما هو موضّح فوق.
+- نص كل آية (`SURAH_VERSES`)، رقم السورة، القارئ (`SURAH_NUMBER`, `RECITER_ID`)،
+  اسم ملف الإخراج (`OUTPUT_FILENAME`) — زي أي هوية تانية، من المهمة نفسها.
+- توقيت كل آية بيتحسب تلقائيًا من الصوت الحقيقي عن طريق الهيكل الموحّد —
+  **مفيش أي أرقام توقيت ثابتة في الهوية دي خالص**.
 
 ---
 
 ## ⚠️ ملاحظة إلزامية: مفيش أي كود تصدير/رندر جوه المواصفة دي
-كل حاجة خاصة بالتصدير — محرك الفيديو (Mediabunny)، الـ render hooks
-(`renderStatus`, `renderProgress`, `startVideoRender()`, دعم
-`?autorender=true`, حدث `video-render-complete`)، وطريقة جلب الأصول —
-**بتتبع القسم 2 في `AGENTS.md` حرفيًا وبس**، بغض النظر عن أي كود تصدير كان
-موجود في مصدر الإلهام الأصلي لهذا التصميم. النسخة اللي اتوصف منها التصميم ده
-كانت بتستخدم فحص codec يدوي وزرار تصدير بس، من غير أي hooks — **ده متعمّدًا
-مش جزء من المواصفة، واتشال بالكامل**.
+كل حاجة خاصة بالتصدير (Mediabunny، الـ render hooks، طريقة جلب الصوت) بتتبع
+"الهيكل العام الموحّد للتصدير" في `AGENTS.md` القسم 2 **حرفيًا وبس** — مش
+النسخة اللي كانت في مصدر الإلهام الأصلي (زرار يدوي بس، بدون hooks، بدون
+`aac-encoder` polyfill، وملف صوت واحد للسورة كاملة بتوقيتات يدوية بدل الجلب
+لكل آية على حدة).
